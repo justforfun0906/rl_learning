@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
+import matplotlib.pyplot as plt
 
 # 如果是 gymnasium 則 import gymnasium as gym
 # 若 gym 在 Python 3.11 可能有版本相容問題，可以用 pip install gym==0.26.2
@@ -82,7 +83,7 @@ def run_episode(env, policy_net, gamma=0.99):
     return log_probs, discounted_r, total_reward
 def train_cartpole(
     max_episodes=1000, 
-    gamma=0.9, 
+    gamma=0.99, 
     lr=1e-3, 
     hidden_dim=128
 ):
@@ -92,6 +93,8 @@ def train_cartpole(
     policy_net = PolicyNetwork(state_dim=4, hidden_dim=hidden_dim, action_dim=2)
     optimizer = optim.Adam(policy_net.parameters(), lr=lr)
     
+    rewards = []
+
     for episode in range(max_episodes):
         log_probs, discounted_r, total_reward = run_episode(env, policy_net, gamma)
         
@@ -107,6 +110,9 @@ def train_cartpole(
         loss.backward()
         optimizer.step()
         
+        # 紀錄每個 episode 的總 reward
+        rewards.append(total_reward)
+        
         # 顯示訓練進度
         print(f"Episode {episode}, Reward = {total_reward}")
         
@@ -116,6 +122,14 @@ def train_cartpole(
             break
     
     env.close()
+    
+    # 繪製 reward 圖
+    plt.plot(rewards)
+    plt.xlabel('Episode')
+    plt.ylabel('Total Reward')
+    plt.title('Total Reward per Episode')
+    plt.show()
+    
     return policy_net
 def play_cartpole(env, policy_net, render=True):
     state = env.reset()[0]
@@ -134,7 +148,7 @@ def play_cartpole(env, policy_net, render=True):
     return total_reward
 
 if __name__ == "__main__":
-    policy_net = train_cartpole(max_episodes=1000)
+    policy_net = train_cartpole(max_episodes=1000, gamma=0.95, lr=5*1e-4)
     
     # 測試
     env = gym.make("CartPole-v1", render_mode="human")  # gym 0.26+ 需要指定 render_mode="human"
