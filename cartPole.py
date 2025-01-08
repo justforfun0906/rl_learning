@@ -37,6 +37,7 @@ class PolicyNetwork(nn.Module):
         log_prob = dist.log_prob(action)
         
         return action.item(), log_prob
+
 def discount_rewards(rewards, gamma=0.99):
     """
     給定一串 step 的 reward，例如 [r0, r1, r2, ...]，
@@ -48,6 +49,15 @@ def discount_rewards(rewards, gamma=0.99):
         running_add = rewards[t] + gamma * running_add
         discounted[t] = running_add
     return discounted
+
+def normalize_rewards(rewards):
+    """
+    Normalize the rewards to have mean 0 and standard deviation 1.
+    """
+    rewards = np.array(rewards)
+    rewards = (rewards - np.mean(rewards)) / (np.std(rewards) + 1e-8)
+    return rewards
+
 def run_episode(env, policy_net, gamma=0.99):
     """
     跑一個 episode，收集 (log_prob, reward)。
@@ -79,8 +89,10 @@ def run_episode(env, policy_net, gamma=0.99):
     
     # 計算折扣後回報
     discounted_r = discount_rewards(rewards, gamma)  # shape (episode_length,)
+    normalized_r = normalize_rewards(discounted_r)  # Normalize rewards
     
-    return log_probs, discounted_r, total_reward
+    return log_probs, normalized_r, total_reward
+
 def train_cartpole(
     max_episodes=1000, 
     gamma=0.99, 
@@ -98,12 +110,14 @@ def train_cartpole(
     for episode in range(max_episodes):
         log_probs, discounted_r, total_reward = run_episode(env, policy_net, gamma)
         
+        # 計算 baseline (平均回報)
+        baseline = np.mean(discounted_r)
+        
         # 準備計算 policy gradient loss
-        # Σ_t [ -log_pi(a_t|s_t) * G_t ]
-        # G_t 就是 discounted_r[t]
+        # Σ_t [ -log_pi(a_t|s_t) * (G_t - baseline) ]
         loss = 0
         for log_prob, Gt in zip(log_probs, discounted_r):
-            loss += -log_prob * Gt
+            loss += -log_prob * (Gt - baseline)
 
         # 反向傳播
         optimizer.zero_grad()
@@ -131,6 +145,7 @@ def train_cartpole(
     plt.show()
     
     return policy_net
+
 def play_cartpole(env, policy_net, render=True):
     state = env.reset()[0]
     done = False
@@ -148,7 +163,7 @@ def play_cartpole(env, policy_net, render=True):
     return total_reward
 
 if __name__ == "__main__":
-    policy_net = train_cartpole(max_episodes=1000, gamma=0.95, lr=5*1e-4)
+    policy_net = train_cartpole(max_episodes=1000, gamma=0.97, lr=3*1e-4, hidden_dim=256)
     
     # 測試
     env = gym.make("CartPole-v1", render_mode="human")  # gym 0.26+ 需要指定 render_mode="human"
